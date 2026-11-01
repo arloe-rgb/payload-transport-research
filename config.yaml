@@ -1,0 +1,13 @@
+payload:
+  mass: 2.0
+  inertia: 0.15
+  gravity: 9.81
+  width: 4
+  height: 2
+
+  # Attachment points in payload body frame [x, z]
+  attachment_points:
+    - [-2,  1]
+    - [-1,  1]
+    - [ 1,  1]
+    - [ 2,  1]
