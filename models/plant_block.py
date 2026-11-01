@@ -5,12 +5,7 @@ import yaml
 class plant:
     def __init__(self, config):
 
-        # Load configuration
-        with open(config, "r") as f:
-            config = yaml.safe_load(f)
-
         payload = config["payload"]
-        uav = config["UAV"]
         sim = config["SIM"]
 
         # Physical parameters
@@ -27,7 +22,7 @@ class plant:
         self.Pc_B = np.array(config["attachment_points"], dtype=float)
 
         # Number of UAVs
-        self.N = config["N"]
+        self.N = sim["N"]
 
         # Initial plant state
         self.x_init = np.array(config["initial_cond"], dtype=float)

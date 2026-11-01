@@ -1,15 +1,30 @@
+import numpy as np
+import yaml
+
 class PD_FF_Controller:
 
-    def __init__(self, Kp, Kd, m, J):
+    def __init__(self, config):
+
+        # CONTROLLER 
+
+        # Controller Config
+        controller_config = config{"controller"}
+
         # defining gain matrices
-        self.Kp = Kp
-        self.Kd = Kd
+        self.Kp = np.diag(controller_config["Kp"])
+        self.Kd = np.diag(controller_config["Kd"])
 
-        # Constant plant parameters (just make them attributes of object since const.)
-        g = 9.81
+        # PLANT
+        payload = config{"payload"}
 
-        self.M = np.diag([m, m, J])
-        self.G = np.array([0.0, -m*g, 0.0])
+        # Physical parameters
+        self.m = payload["mass"]
+        self.J = payload["inertia"]
+        self.g = payload["gravity"]
+
+        # Mass matrix and gravity vector
+        self.M = np.diag([self.m, self.m, self.J])
+        self.G = np.array([0.0, -self.m*self.g, 0.0])
 
         # Defining error terms (may pass these into a object for calculating derivatives)
         self.prev_error = 0.0
