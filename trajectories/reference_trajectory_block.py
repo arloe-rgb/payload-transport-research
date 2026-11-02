@@ -5,7 +5,7 @@ class reference_trajectory:
 
     def __init__(self, config):
 
-        traj = config["trajectory"]
+        traj = config["reference_trajectory"]
 
         self.type = traj["type"]
         self.duration = traj["duration"]
