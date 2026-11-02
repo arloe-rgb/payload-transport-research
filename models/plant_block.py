@@ -19,34 +19,46 @@ class plant:
         self.G = np.array([0.0, -self.m*self.g, 0.0])
 
         # Constant attachment points (body frame)
-        self.Pc_B = np.array(config["attachment_points"], dtype=float)
+        self.Pc_B = np.array(payload["attachment_points"], dtype=float)
 
         # Number of UAVs
         self.N = sim["N"]
 
         # Initial plant state
-        self.x_init = np.array(config["initial_cond"], dtype=float)
-        self.state = np.array(self.x_init[:3], dtype=float).copy()
-        self.dstate = np.array(self.x_init[3:], dtype=float).copy()
+        self.x_init = np.array(sim["initial_cond"], dtype=float)
+        self.state = np.array(self.x_init, dtype=float).copy()
+   
 
+    def run_dynamics(self, x, u):
 
-    def run_dynamics(self, u_optimal, B):
+        # calc B matrtix
+        B = self.B_mat(x[2])
 
         # Calculate optimal desired wrench
-        tau_d_opt = B @ u_optimal
+        tau_d_opt = B @ u
 
-        x_ddot = self.M_inv @ (tau_d_opt + self.G)
+        q_ddot = self.M_inv @ (tau_d_opt + self.G)
 
-        return x_ddot
+        return np.concatenate((x[3:], q_ddot))
 
-    def B_mat(self):
+    def integrate(self, u_optimal, dt):
 
-        # Extract theta
-        theta = self.state[2]
+        x = self.state
+
+        k1 = self.run_dynamics(x, u)
+        k2 = self.run_dynamics(x + 0.5*dt*k1, u_optimal)
+        k3 = self.run_dynamics(x + 0.5*dt*k2, u_optimal)
+        k4 = self.run_dynamics(x + dt*k3, u_optimal)
+
+        self.state = x + (dt/6.0)*(k1 + 2*k2 + 2*k3 + k4)
+
+        return self.state
+
+    def B_mat(self, theta):
 
         # Calculate Rotation Matrix
-        R = np.array([[cos(theta), -sin(theta)], 
-                     [sin(theta), cos(theta)]])
+        R = np.array([[np.cos(theta), -np.sin(theta)], 
+                     [np.sin(theta), np.cos(theta)]])
 
         # Cable Positions in the Inertial Frame
         Pc_W = self.Pc_B @ R.T

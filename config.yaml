@@ -21,3 +21,16 @@ SIM:
   dt: 0.1
   duration: 10
   N: 4 # number of UAVs
+
+  reference_trajectory:
+    type: "linear"
+
+    duration: 5.0
+
+    start: [0.0, 0.0, 0.0]
+    goal: [3.0, 2.0, 0.0]
+
+    circular:
+      center: [0.0, 0.0]
+      radius: 2.0
+      omega: 0.5
