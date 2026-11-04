@@ -3,6 +3,7 @@ import yaml
 
 
 class plant:
+
     def __init__(self, config):
 
         payload = config["payload"]
@@ -12,30 +13,31 @@ class plant:
         self.m = payload["mass"]
         self.J = payload["inertia"]
         self.g = payload["gravity"]
-
-        # Mass matrix and gravity vector
-        self.M = np.diag([self.m, self.m, self.J])
-        self.M_inv = np.linalg.inv(self.M)
-        self.G = np.array([0.0, -self.m*self.g, 0.0])
-
-        # Constant attachment points (body frame)
-        self.Pc_B = np.array(payload["attachment_points"], dtype=float)
-
+        
         # Number of UAVs
         self.N = sim["N"]
 
         # Initial plant state
         self.x_init = np.array(sim["initial_cond"], dtype=float)
         self.state = np.array(self.x_init, dtype=float).copy()
-   
+
+        # Mass matrix and gravity vector
+        self.M = np.diag([self.m, self.m, self.J])
+        self.M_inv = np.linalg.inv(self.M)
+        self.G = np.array([0.0, -self.m*self.g, 0.0])
+        self.B = np.zeros((3, 2*self.N))
+
+        # Constant attachment points (body frame)
+        self.Pc_B = np.array(payload["attachment_points"], dtype=float)
+
 
     def run_dynamics(self, x, u):
 
         # calc B matrtix
-        B = self.B_mat(x[2])
+        self.B = self.B_mat(x[2])
 
         # Calculate optimal desired wrench
-        tau_d_opt = B @ u
+        tau_d_opt = self.B @ u
 
         q_ddot = self.M_inv @ (tau_d_opt + self.G)
 

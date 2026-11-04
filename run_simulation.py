@@ -3,7 +3,7 @@ import yaml
 
 from models.plant_block import plant
 from controllers.controller_block import PD_FF_Controller
-#from controllers.control_allocation_clock import allocator
+#from controllers.control_allocation_block import allocator
 #from trajectories.reference_trajectory_block import ref_trajectory
 
 def run_simulation(config):
@@ -11,7 +11,7 @@ def run_simulation(config):
     # Object Initialization
     payload = plant(config)
     controller = PD_FF_Controller(config)
-    #allocation = allocator(config)
+    #control_allocation = allocator(config)
     #trajectory = reference_trajectory(config)
 
     # SIM Parameter Setup
