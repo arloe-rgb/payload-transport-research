@@ -10,8 +10,14 @@ class allocator:
         # Number of UAVs
         self.N = uav["N"]
 
-        # Init decison variable u make it N x 2 for easier computation
-        self.u = np.zeros((self.N*2, 1))
+        # Init decison variable u
+        self.u = np.zeros(self.N*2)
+
+        # multipliers for equality constraints
+        self.q = np.zeros(3)
+
+        # multipliers for inequality constraints
+        self.p = np.zeros(self.N * 2)
 
         # Optimization weights (one per UAV)
         self.weights = np.array(uav["weights"], dtype=float)
@@ -44,13 +50,27 @@ class allocator:
         u = self.u.reshape(self.N, 2)
 
         # Makes sure that each UAV does not exceed its respective max force
-        force_mag_constr = self.F_max**2 - np.sum(u**2, axis=1)
+        force_mag_constr = np.sum(u**2, axis=1) - self.F_max**2
 
         # Make sure that the vertical component for each force it always positive
-        force_dir_constr = u[:,1]
+        force_dir_constr = -u[:,1]
 
         # make vector of all inequality constraint equations
         inequ_constr = np.concatenate((force_mag_constr, force_dir_constr))
 
         return inequ_constr
+
+    def lagrangian(self, B, tau_d):
+
+        obj_func = self.objective_function()
+
+        eq_constr = self.equality_constraints(B, tau_d)
+
+        ineq_constr = self.inequality_constraints()
+
+        L = obj_func + np.dot(self.q, eq_constr) + np.dot(self.p, ineq_constr)
+
+        return L
+
+
 
