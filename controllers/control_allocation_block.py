@@ -16,8 +16,8 @@ class allocator:
         # multipliers for equality constraints
         self.q = np.zeros(3)
 
-        # multipliers for inequality constraints
-        self.p = np.zeros(self.N * 2)
+        # log barrier scalar
+        self.log_scalar = uav["log_scalar"]
 
         # Optimization weights (one per UAV)
         self.weights = np.array(uav["weights"], dtype=float)
@@ -25,50 +25,58 @@ class allocator:
         # Maximum force for each UAV
         self.F_max = np.array(uav["F_max"], dtype=float)
 
-    def objective_function(self):
+    def objective_function(self, u_control):
 
         # reshape u for easier computation
-        u = self.u.reshape(self.N, 2)
+        u = u_control.reshape(self.N, 2)
 
         # Calc (||u_i||_2)^2 first
         force_mag = np.sum(u**2, axis=1)
 
-        # can then combine force_mags with weights into the objective function
-        obj_fun = 0.5 * np.dot(self.weights, force_mag)
+        # 1/2 s^T * ||u||^2
+        quad_cost = 0.5 * np.dot(self.weights, force_mag)
 
-        return obj_fun
+        # Inequality constraints 
+        force_mag_constr = force_mag - self.F_max**2   # Max force constraints
+        force_dir_constr = -u[:, 1]   # Force direction constraints
 
-    def equality_constraints(self, B, tau_d):
+        # Log barrier cost function
+        barrier_cost = -self.log_scalar*(
+            np.sum(np.log(-force_mag_constr))
+            + np.sum(np.log(-force_dir_constr))
+        )
 
-        equal_constr = B @ self.u - tau_d
+        return quad_cost + barrier_cost
+
+    def equality_constraints(self, B, u, tau_d):
+
+        equal_constr = B @ u - tau_d
 
         return equal_constr
 
-    def inequality_constraints(self):
+    # def inequality_constraints(self):
 
-        # reshape self.u for easier computation
-        u = self.u.reshape(self.N, 2)
+    #     # reshape self.u for easier computation
+    #     u = self.u.reshape(self.N, 2)
 
-        # Makes sure that each UAV does not exceed its respective max force
-        force_mag_constr = np.sum(u**2, axis=1) - self.F_max**2
+    #     # Makes sure that each UAV does not exceed its respective max force
+    #     force_mag_constr = np.sum(u**2, axis=1) - self.F_max**2
 
-        # Make sure that the vertical component for each force it always positive
-        force_dir_constr = -u[:,1]
+    #     # Make sure that the vertical component for each force it always positive
+    #     force_dir_constr = -u[:,1]
 
-        # make vector of all inequality constraint equations
-        inequ_constr = np.concatenate((force_mag_constr, force_dir_constr))
+    #     # make vector of all inequality constraint equations
+    #     inequ_constr = np.concatenate((force_mag_constr, force_dir_constr))
 
-        return inequ_constr
+    #     return inequ_constr
 
-    def lagrangian(self, B, tau_d):
+    def lagrangian(self, u, q, B, tau_d):
 
-        obj_func = self.objective_function()
+        obj_func = self.objective_function(u)
 
-        eq_constr = self.equality_constraints(B, tau_d)
+        eq_constr = self.equality_constraints(B, u, tau_d)
 
-        ineq_constr = self.inequality_constraints()
-
-        L = obj_func + np.dot(self.q, eq_constr) + np.dot(self.p, ineq_constr)
+        L = obj_func + np.dot(q, eq_constr)
 
         return L
 

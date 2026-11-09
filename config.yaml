@@ -16,6 +16,7 @@ UAV:
   N: 4 # number of UAVs
   weights: [1.0, 1.0, 1.0, 1.0]
   F_max: [1.0, 1.0, 1.0, 1.0]
+  log_scalar = 0.01
 
 controller:
   Kp: [1.0, 1.0, 1.0]
