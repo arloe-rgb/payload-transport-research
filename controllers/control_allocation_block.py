@@ -1,5 +1,7 @@
 import numpy as np
 import yaml
+import torch
+from torch.func import grad, jacfwd, hessian
 
 class allocator:
 
@@ -11,19 +13,19 @@ class allocator:
         self.N = uav["N"]
 
         # Init decison variable u
-        self.u = np.zeros(self.N*2)
+        self.u = torch.zeros(self.N*2)
 
         # multipliers for equality constraints
-        self.q = np.zeros(3)
+        self.lamda = torch.zeros(3)
 
         # log barrier scalar
         self.log_scalar = uav["log_scalar"]
 
         # Optimization weights (one per UAV)
-        self.weights = np.array(uav["weights"], dtype=float)
+        self.weights = torch.tensor(uav["weights"], dtype=torch.float32)
 
         # Maximum force for each UAV
-        self.F_max = np.array(uav["F_max"], dtype=float)
+        self.F_max = torch.tensor(uav["F_max"], dtype=torch.float32)
 
     def objective_function(self, u_control):
 
@@ -31,10 +33,10 @@ class allocator:
         u = u_control.reshape(self.N, 2)
 
         # Calc (||u_i||_2)^2 first
-        force_mag = np.sum(u**2, axis=1)
+        force_mag = torch.sum(u**2, dim=1)
 
         # 1/2 s^T * ||u||^2
-        quad_cost = 0.5 * np.dot(self.weights, force_mag)
+        quad_cost = 0.5 * torch.dot(self.weights, force_mag)
 
         # Inequality constraints 
         force_mag_constr = force_mag - self.F_max**2   # Max force constraints
@@ -42,8 +44,8 @@ class allocator:
 
         # Log barrier cost function
         barrier_cost = -self.log_scalar*(
-            np.sum(np.log(-force_mag_constr))
-            + np.sum(np.log(-force_dir_constr))
+            torch.sum(torch.log(-force_mag_constr))
+            + torch.sum(torch.log(-force_dir_constr))
         )
 
         return quad_cost + barrier_cost
@@ -54,31 +56,63 @@ class allocator:
 
         return equal_constr
 
-    # def inequality_constraints(self):
-
-    #     # reshape self.u for easier computation
-    #     u = self.u.reshape(self.N, 2)
-
-    #     # Makes sure that each UAV does not exceed its respective max force
-    #     force_mag_constr = np.sum(u**2, axis=1) - self.F_max**2
-
-    #     # Make sure that the vertical component for each force it always positive
-    #     force_dir_constr = -u[:,1]
-
-    #     # make vector of all inequality constraint equations
-    #     inequ_constr = np.concatenate((force_mag_constr, force_dir_constr))
-
-    #     return inequ_constr
-
-    def lagrangian(self, u, q, B, tau_d):
+    def lagrangian(self, t, u, lamda, B, tau_d):
 
         obj_func = self.objective_function(u)
 
         eq_constr = self.equality_constraints(B, u, tau_d)
 
-        L = obj_func + np.dot(q, eq_constr)
+        L = obj_func + torch.dot(lamda, eq_constr)
 
         return L
+
+    def FOO_vector(self, t, u, lamda, B, tau_d):
+
+        dL_du, dL_dlamda = grad(self.lagrangian, argnums=(1, 2))(t, u, lamda, B, tau_d)
+
+        return torch.cat((dL_du, dL_dlamda))
+
+    def hessian(self, t, u, lamda, B, tau_d):
+
+        dFOO_du, dFOO_dlamda = jacfwd(self.FOO_vector, argnums=(1, 2))(t, u, lamda, B, tau_d)
+
+        return torch.cat((dFOO_du, dFOO_dlamda), dim=1)
+
+    def u_ff(self, t, u, lamda, B, tau_d, chi, chi_dot):
+
+        # time derivative of FOO_vector
+        dFOO_dt = jacfwd(self.FOO_vector, argnums=0)(t, u, lamda, B, tau_d, chi, chi_dot)
+
+        # state derivative of FOO_vector
+        dFOO_dchi = jacfwd(self.FOO_vector, argnums=5)(t, u, lamda, B, tau_d, chi, chi_dot)
+
+        uff = dFOO_dt + dFOO_dchi @ chi_dot
+
+        return uff
+
+    def allocator_dynamics(self, t, u, lamda, B, tau_d, chi, chi_dot):
+
+        # Convert inputs to torch tensors
+        chi = torch.as_tensor(chi, dtype=torch.float64)
+        chi_dot = torch.as_tensor(chi_dot, dtype=torch.float64)
+        u = torch.as_tensor(u, dtype=torch.float64)
+        tau_d = torch.as_tensor(tau_d, dtype=torch.float64)
+
+        FOO_vector = self.FOO_vector(t, u, lamda, B, tau_d)
+
+        hessian = self.hessian(t, u, lamda, B, tau_d)
+
+        uff = self.u_ff(t, u, lamda, B, tau_d, chi, chi_dot)
+
+        ff_term = self.Gamma @ FOO_vector + uff
+
+        # constructing the dynamics of the decision variables and multipliers
+        ud_ld = torch.linalg.solve(hessian, -ff_term)
+
+        return ud_ld
+
+
+    def integrate()
 
 
 

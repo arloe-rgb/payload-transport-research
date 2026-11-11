@@ -3,7 +3,7 @@ import yaml
 
 from models.plant_block import plant
 from controllers.controller_block import PD_FF_Controller
-#from controllers.control_allocation_block import allocator
+from controllers.control_allocation_block import allocator
 #from trajectories.reference_trajectory_block import ref_trajectory
 
 def run_simulation(config):
@@ -11,7 +11,7 @@ def run_simulation(config):
     # Object Initialization
     payload = plant(config)
     controller = PD_FF_Controller(config)
-    #control_allocation = allocator(config)
+    control_allocation = allocator(config)
     #trajectory = reference_trajectory(config)
 
     # SIM Parameter Setup
@@ -36,6 +36,17 @@ def run_simulation(config):
 
         # calculate control input
         tau_d = controller.control_cmd(payload.state, x_r, xddot_r)
+
+        # Current allocator states (convert to NumPy for plant)
+        u = control_allocation.u.detach().cpu().numpy().copy()
+        lamda = control_allocation.lamda
+
+        # Calculate current payload state derivative
+        chi = payload.state.copy()
+        chi_dot = payload.run_dynamics(chi, u)
+
+        # Calculate allocation dynamics
+        u_dot, lamda_dot = control_allocation.allocator_dynamics(t, u, lamda, tau_d, chi, chi_dot)
 
         # control allocation
         # u_optimal = allocation.allocate() -- will fill in later
