@@ -12,11 +12,13 @@ payload:
     - [ 1,  1]
     - [ 2,  1]
 
-UAV:
-  N: 4 # number of UAVs
+allocation:
   weights: [1.0, 1.0, 1.0, 1.0]
   F_max: [1.0, 1.0, 1.0, 1.0]
-  log_scalar = 0.01
+  log_scalar: 0.01
+  gamma: [10.0, 10.0, 10.0, 10.0,
+          10.0, 10.0, 10.0, 10.0,
+          5.0, 5.0, 5.0]
 
 controller:
   Kp: [1.0, 1.0, 1.0]
@@ -26,9 +28,10 @@ SIM:
   initial_cond: [0, 0, 0, 0, 0, 0]
   dt: 0.1
   duration: 10
+  N: 4 # number of UAVs
 
 reference_trajectory:
-  type: "linear"
+  type: "circular"
 
   duration: 5.0
 

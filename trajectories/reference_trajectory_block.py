@@ -1,4 +1,4 @@
-import numpy as np
+import torch
 import yaml
 
 class reference_trajectory:
@@ -10,14 +10,14 @@ class reference_trajectory:
         self.type = traj["type"]
         self.duration = traj["duration"]
 
-        self.q_start = np.array(traj["start"], dtype=float)
-        self.q_goal = np.array(traj["goal"], dtype=float)
+        self.q_start = torch.tensor(traj["start"], dtype=torch.float64, device="cpu")
+        self.q_goal = self.q_start.new_tensor(traj["goal"])
+        self.theta_ref = self.q_start[2]
 
         if self.type == "circular" :
-            self.center = np.array(traj["center"], dtype=float)
-            self.radius = traj["radius"]
-            self.omega = traj["omega"]
-            self.theta_ref = traj["theta_ref"]
+            self.center = self.q_start.new_tensor(traj["circular"]["center"])
+            self.radius = traj["circular"]["radius"]
+            self.omega = traj["circular"]["omega"]
 
     def get_trajectory(self, t):
 
@@ -25,9 +25,9 @@ class reference_trajectory:
             q_ref, qdot_ref, qddot_ref = self.linear(t)
 
         elif self.type == "circular":
-            q_ref, qdot_ref, qddot_ref = self.circular(t)
+            q_ref, qdot_ref, qddot_ref = self.circular_traj(t)
 
-        x_ref = np.concatenate((q_ref, qdot_ref))
+        x_ref = torch.cat((q_ref, qdot_ref))
 
         return x_ref, qddot_ref
 
@@ -42,27 +42,28 @@ class reference_trajectory:
         xc, zc = self.center
         r = self.radius
         omega = self.omega
-        theta = self.theta_ref
+        theta = torch.as_tensor(self.theta_ref, dtype=self.center.dtype, device=self.center.device)
+        t = torch.as_tensor(t, dtype=self.center.dtype, device=self.center.device)
 
         # Position
-        q = np.array([
-            xc + r * np.cos(omega * t),
-            zc + r * np.sin(omega * t),
+        q = torch.stack([
+            xc + r * torch.cos(omega * t),
+            zc + r * torch.sin(omega * t),
             theta
         ])
 
         # Velocity
-        qdot = np.array([
-            -r * omega * np.sin(omega * t),
-            r * omega * np.cos(omega * t),
-            0.0
+        qdot = torch.stack([
+            -r * omega * torch.sin(omega * t),
+            r * omega * torch.cos(omega * t),
+            torch.zeros_like(t)
         ])
 
         # Acceleration
-        qddot = np.array([
-            -r * omega**2 * np.cos(omega * t),
-            -r * omega**2 * np.sin(omega * t),
-            0.0
+        qddot = torch.stack([
+            -r * omega**2 * torch.cos(omega * t),
+            -r * omega**2 * torch.sin(omega * t),
+            torch.zeros_like(t)
         ])
 
         return q, qdot, qddot

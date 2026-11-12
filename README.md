@@ -33,7 +33,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-The dependencies are NumPy for numerical calculations and PyYAML for reading
+The dependencies are PyTorch for numerical calculations and PyYAML for reading
 the configuration. Versions are not pinned yet; there is no validated runtime
 environment or lockfile for this prototype.
 
@@ -48,8 +48,7 @@ currently uses a hard-coded gravity value of `9.81`.
 The project is not yet a runnable simulation. The original research modules
 have been preserved during repository setup, including these unfinished items:
 
-- `controller_block.py` implements a PD/feedforward wrench command but needs
-  a NumPy import before it can be used.
+- `controller_block.py` implements a PD/feedforward wrench command.
 - `plant_block.py` contains the initial mass, gravity, geometry, and state
   setup. Its constructor is currently named `__int__`, configuration loading
   refers to an undefined `config_path`, the PyYAML import is missing, and the

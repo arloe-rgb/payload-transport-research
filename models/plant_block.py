@@ -1,4 +1,4 @@
-import numpy as np
+import torch
 import yaml
 
 
@@ -18,17 +18,17 @@ class plant:
         self.N = sim["N"]
 
         # Initial plant state
-        self.x_init = np.array(sim["initial_cond"], dtype=float)
-        self.state = np.array(self.x_init, dtype=float).copy()
+        self.x_init = torch.tensor(sim["initial_cond"], dtype=torch.float64, device="cpu")
+        self.state = self.x_init.clone()
 
         # Mass matrix and gravity vector
-        self.M = np.diag([self.m, self.m, self.J])
-        self.M_inv = np.linalg.inv(self.M)
-        self.G = np.array([0.0, -self.m*self.g, 0.0])
-        self.B = np.zeros((3, 2*self.N))
+        self.M = torch.diag(self.x_init.new_tensor([self.m, self.m, self.J]))
+        self.M_inv = torch.linalg.inv(self.M)
+        self.G = self.x_init.new_tensor([0.0, -self.m*self.g, 0.0])
+        self.B = self.x_init.new_zeros((3, 2*self.N))
 
         # Constant attachment points (body frame)
-        self.Pc_B = np.array(payload["attachment_points"], dtype=float)
+        self.Pc_B = self.x_init.new_tensor(payload["attachment_points"])
 
 
     def run_dynamics(self, x, u):
@@ -41,13 +41,13 @@ class plant:
 
         q_ddot = self.M_inv @ (tau_d_opt + self.G)
 
-        return np.concatenate((x[3:], q_ddot))
+        return torch.cat((x[3:], q_ddot))
 
     def integrate(self, u_optimal, dt):
 
         x = self.state
 
-        k1 = self.run_dynamics(x, u)
+        k1 = self.run_dynamics(x, u_optimal)
         k2 = self.run_dynamics(x + 0.5*dt*k1, u_optimal)
         k3 = self.run_dynamics(x + 0.5*dt*k2, u_optimal)
         k4 = self.run_dynamics(x + dt*k3, u_optimal)
@@ -59,14 +59,15 @@ class plant:
     def B_mat(self, theta):
 
         # Calculate Rotation Matrix
-        R = np.array([[np.cos(theta), -np.sin(theta)], 
-                     [np.sin(theta), np.cos(theta)]])
+        theta = torch.as_tensor(theta, dtype=self.Pc_B.dtype, device=self.Pc_B.device)
+        R = torch.stack((torch.stack((torch.cos(theta), -torch.sin(theta))),
+                         torch.stack((torch.sin(theta), torch.cos(theta)))))
 
         # Cable Positions in the Inertial Frame
         Pc_W = self.Pc_B @ R.T
 
         # Calc Allocation matrix
-        B = np.zeros((3, 2*self.N))
+        B = Pc_W.new_zeros((3, 2*self.N))
 
         B[0, 0::2] = 1.0
         B[1, 1::2] = 1.0

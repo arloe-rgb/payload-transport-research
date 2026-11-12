@@ -1,4 +1,4 @@
-import numpy as np
+import torch
 import yaml
 
 class PD_FF_Controller:
@@ -11,8 +11,8 @@ class PD_FF_Controller:
         controller_config = config["controller"]
 
         # defining gain matrices
-        self.Kp = np.diag(controller_config["Kp"])
-        self.Kd = np.diag(controller_config["Kd"])
+        self.Kp = torch.diag(torch.tensor(controller_config["Kp"], dtype=torch.float64, device="cpu"))
+        self.Kd = torch.diag(self.Kp.new_tensor(controller_config["Kd"]))
 
         # PLANT
         payload = config["payload"]
@@ -23,8 +23,8 @@ class PD_FF_Controller:
         self.g = payload["gravity"]
 
         # Mass matrix and gravity vector
-        self.M = np.diag([self.m, self.m, self.J])
-        self.G = np.array([0.0, -self.m*self.g, 0.0])
+        self.M = torch.diag(self.Kp.new_tensor([self.m, self.m, self.J]))
+        self.G = self.Kp.new_tensor([0.0, -self.m*self.g, 0.0])
 
         # Defining error terms (may pass these into a object for calculating derivatives)
         self.prev_error = 0.0
