@@ -113,6 +113,43 @@ Refresh the page after regenerating the default replay. Use Ctrl+C to stop
 the local server. Running `run_simulation.py` without the export flag still
 opens the existing Matplotlib figures.
 
+## Publishing a Recorded Run
+
+The [public viewer](https://arloe-rgb.github.io/payload-transport-visualization/)
+is deployed from a separate
+[GitHub repository](https://github.com/arloe-rgb/payload-transport-visualization).
+Clone that checkout next to the research repository once. Run these commands
+from the research checkout to export a run and prepare it for publication:
+
+```powershell
+git clone https://github.com/arloe-rgb/payload-transport-visualization.git ..\payload-transport-visualization
+.\.venv\Scripts\python.exe .\run_simulation.py --export-replay .\results\trial.json
+.\.venv\Scripts\python.exe .\visualization\publish.py ..\payload-transport-visualization add .\results\trial.json --id trial --name "Trial run"
+```
+
+Choose a new lowercase ID for each run. Add `--description "Experiment notes"`
+to include context or `--default` to make the run load first. The helper copies
+only the allowlisted viewer assets, deployment files, and selected replay. It
+preserves the JSON numbers as exported and updates the dataset manifest.
+
+Review the changes and publish from the public checkout:
+
+```powershell
+Set-Location ..\payload-transport-visualization
+git status --short
+git diff
+git add -- site .github/workflows/deploy.yml README.md
+git commit -m "Publish trial run"
+git push origin main
+```
+
+GitHub Actions deploys `site/` after the push. To update the viewer without
+adding a run, use `python .\visualization\publish.py ..\payload-transport-visualization sync`
+from the research checkout with its environment active, then review, commit,
+and push the public checkout. The
+[public README](https://github.com/arloe-rgb/payload-transport-visualization#recorded-runs)
+documents the version 1 replay and manifest schema.
+
 ## Working Across Multiple Computers
 
 Each computer creates and maintains its own `.venv`. GitHub synchronizes the

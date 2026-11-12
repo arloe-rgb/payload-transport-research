@@ -7,6 +7,8 @@ const chartRoot = byId("charts");
 let data, time, index, playing = false, lastFrame, frameRequest;
 let charts = [];
 let scene3D;
+const datasetMenu = byId("dataset");
+let replayRequest = 0;
 
 function canvasSize(canvas) {
   const {width, height} = canvas.getBoundingClientRect();
@@ -35,6 +37,7 @@ function validate(replay) {
   for (const [key, size] of Object.entries({
     state: 6, reference: 6, u: 2 * count, lambda: 3, gradientU: 2 * count, gradientLambda: 3,
   })) {
+    if (["lambda", "gradientU", "gradientLambda"].includes(key) && replay[key] === undefined) continue;
     if (!Array.isArray(replay[key]) || replay[key].length !== samples.length ||
         !replay[key].every((row) => vector(row, size))) {
       throw new Error(`Invalid or missing replay history: ${key}.`);
@@ -204,11 +207,11 @@ function buildCharts() {
         series(`UAV ${i + 1} x`, component(data.u, 2 * i), color(i)),
         series(`UAV ${i + 1} z`, component(data.u, 2 * i + 1), color(i), true),
       ])],
-      ["Equality multipliers λ", ["Force x", "Force z", "Pitch torque"].map((label, i) =>
+      data.lambda && ["Equality multipliers λ", ["Force x", "Force z", "Pitch torque"].map((label, i) =>
         series(label, component(data.lambda, i), color(i)))],
-      ["Gradient norm ‖∇ᵤℒ‖₂", [series("Control gradient", norm("gradientU"), palette[0])]],
-      ["Gradient norm ‖∇λℒ‖₂", [series("Multiplier gradient", norm("gradientLambda"), palette[1])]],
-    ]],
+      data.gradientU && ["Gradient norm ‖∇ᵤℒ‖₂", [series("Control gradient", norm("gradientU"), palette[0])]],
+      data.gradientLambda && ["Gradient norm ‖∇λℒ‖₂", [series("Multiplier gradient", norm("gradientLambda"), palette[1])]],
+    ].filter(Boolean)],
   ];
 
   for (const [name, plots] of groups) {
@@ -291,27 +294,80 @@ byId("camera-follow").addEventListener("change", (event) => scene3D?.setFollow(e
 byId("file").addEventListener("change", async (event) => {
   const [file] = event.target.files;
   if (!file) return;
+  const request = ++replayRequest;
   try {
-    load(JSON.parse(await file.text()), file.name);
+    const replay = JSON.parse(await file.text());
+    if (request !== replayRequest) return;
+    load(replay, file.name);
+    datasetMenu.value = "";
+    datasetMenu.dataset.loaded = "";
   } catch (error) {
-    byId("run-info").textContent = error.message;
+    if (request === replayRequest) byId("run-info").textContent = error.message;
   } finally {
     event.target.value = "";
   }
 });
 
-if (location.protocol === "file:") showEmpty();
-else fetch("replay.json", {cache: "no-store"}).then(async (response) => {
-  if (data) return;
-  if (!response.ok) return showEmpty();
-  const replay = await response.json();
-  if (!data) load(replay, "replay.json");
-}).catch((error) => {
-  if (!data) showEmpty(error.message);
-});
+async function loadRecordedRun(run) {
+  const request = ++replayRequest;
+  pause();
+  byId("run-info").textContent = "Loading replay…";
+  try {
+    const response = await fetch(run.file, {cache: "no-cache"});
+    if (request !== replayRequest) return;
+    if (!run.id && response.status === 404) return showEmpty();
+    if (!response.ok) throw new Error(`Could not load ${run.name} (HTTP ${response.status}).`);
+    const replay = await response.json();
+    if (request !== replayRequest) return;
+    load(replay, run.description ? `${run.name} · ${run.description}` : run.name);
+    datasetMenu.value = run.id || "";
+  } catch (error) {
+    if (request !== replayRequest) return;
+    if (data) {
+      datasetMenu.value = datasetMenu.dataset.loaded || "";
+      byId("run-info").textContent = error.message;
+    } else showEmpty(error.message);
+    return;
+  }
+  datasetMenu.dataset.loaded = datasetMenu.value;
+}
+
+async function initializeReplays() {
+  if (location.protocol === "file:") return showEmpty();
+  try {
+    const response = await fetch("datasets/manifest.json", {cache: "no-cache"});
+    if (response.status === 404) {
+      if (!replayRequest) return loadRecordedRun({name: "replay.json", file: "replay.json"});
+      return;
+    }
+    if (!response.ok) throw new Error(`Could not load run list (HTTP ${response.status}).`);
+    const manifest = await response.json();
+    if (manifest.version !== 1 || !Array.isArray(manifest.datasets)) throw new Error("Invalid run list.");
+    const runs = new Map(manifest.datasets.map((run) => [run.id, run]));
+    if (!runs.has(manifest.default)) throw new Error("The run list has no default replay.");
+    datasetMenu.append(new Option("Select a recorded run", ""));
+    for (const run of runs.values()) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(run.id) || run.file !== `datasets/${run.id}.json`) {
+        throw new Error("The run list contains an invalid dataset path.");
+      }
+      datasetMenu.append(new Option(`${run.name} · ${run.duration} s`, run.id));
+    }
+    datasetMenu.options[0].disabled = true;
+    datasetMenu.addEventListener("change", () => {
+      const run = runs.get(datasetMenu.value);
+      if (run) loadRecordedRun(run);
+    });
+    byId("recorded-runs").hidden = false;
+    if (!replayRequest) await loadRecordedRun(runs.get(manifest.default));
+  } catch (error) {
+    if (!replayRequest) showEmpty(error.message);
+  }
+}
 
 function showEmpty(message = "Open an exported replay JSON to begin.") {
   byId("run-info").textContent = "No replay loaded";
   byId("empty").textContent = message;
   byId("empty").hidden = false;
 }
+
+initializeReplays();

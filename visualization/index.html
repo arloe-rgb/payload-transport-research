@@ -13,7 +13,10 @@
   <header class="masthead">
     <div class="mark" aria-hidden="true">◈</div>
     <h1>Payload Transport Lab</h1>
-    <label class="open">Open replay<input id="file" type="file" accept=".json,application/json"></label>
+    <div class="replay-controls">
+      <label id="recorded-runs" hidden>Recorded run <select id="dataset"></select></label>
+      <label class="open">Open replay<input id="file" type="file" accept=".json,application/json"></label>
+    </div>
   </header>
   <main>
     <div class="workspace">
