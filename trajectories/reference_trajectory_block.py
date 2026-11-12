@@ -19,6 +19,11 @@ class reference_trajectory:
             self.radius = traj["circular"]["radius"]
             self.omega = traj["circular"]["omega"]
 
+        if self.type == "sinusoidal":
+            self.amplitude = traj["sinusoidal"]["amplitude"]
+            self.omega = traj["sinusoidal"]["omega"]
+            self.vx = traj["sinusoidal"]["vx"]
+
     def get_trajectory(self, t):
 
         if self.type == "linear":
@@ -26,6 +31,9 @@ class reference_trajectory:
 
         elif self.type == "circular":
             q_ref, qdot_ref, qddot_ref = self.circular_traj(t)
+
+        elif self.type == "sinusoidal":
+            q_ref, qdot_ref, qddot_ref = self.sinusoidal_traj(t)
 
         x_ref = torch.cat((q_ref, qdot_ref))
 
@@ -67,3 +75,42 @@ class reference_trajectory:
         ])
 
         return q, qdot, qddot
+
+    def sinusoidal_traj(self, t):
+        
+        # Sinusoidal trajectory parameters
+        A = self.amplitude
+        omega = self.omega
+        vx = self.vx
+
+        x0, z0, theta = self.q_start
+
+        t = torch.as_tensor(
+            t,
+            dtype=self.q_start.dtype,
+            device=self.q_start.device
+        )
+
+        # Position
+        q = torch.stack([
+            x0 + vx * t,
+            z0 + A * torch.sin(omega * t),
+            theta
+        ])
+
+        # Velocity
+        qdot = torch.stack([
+            vx * torch.ones_like(t),
+            A * omega * torch.cos(omega * t),
+            torch.zeros_like(t)
+        ])
+
+        # Acceleration
+        qddot = torch.stack([
+            torch.zeros_like(t),
+            -A * omega**2 * torch.sin(omega * t),
+            torch.zeros_like(t)
+        ])
+
+        return q, qdot, qddot
+

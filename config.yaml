@@ -31,9 +31,9 @@ SIM:
   N: 4 # number of UAVs
 
 reference_trajectory:
-  type: "circular"
+  type: "sinusoidal"  # "circular", "sinusoidal", or "linear"
 
-  duration: 5.0
+  duration: 20.0
 
   start: [0.0, 0.0, 0.0]
   goal: [3.0, 2.0, 0.0]
@@ -42,3 +42,8 @@ reference_trajectory:
     center: [0.0, 0.0]
     radius: 2.0
     omega: 0.5
+
+  sinusoidal:
+    amplitude: 0.5
+    omega: 1.0
+    vx: 0.5
