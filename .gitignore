@@ -10,6 +10,7 @@ htmlcov/
 
 # Local environments and packaging
 .venv/
+.venv-1/
 venv/
 env/
 build/
@@ -18,7 +19,8 @@ dist/
 
 # Local editor and operating-system files
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -31,6 +33,7 @@ Desktop.ini
 *.key
 
 # Generated simulation output
+/visualization/replay.json
 outputs/
 results/
 logs/
