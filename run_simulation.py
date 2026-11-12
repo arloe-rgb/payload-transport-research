@@ -25,6 +25,10 @@ def run_simulation(config):
     # DATA logging setup
     logged_state = payload.state.new_zeros((num_steps + 1, payload.state.numel()))
     logged_state[0] = payload.state.clone()
+    logged_forces = control_allocation.u.new_zeros(
+    (num_steps + 1, 2*control_allocation.N)
+    )
+    logged_forces[0] = control_allocation.u.detach().clone()
 
     # Simulation Loop
     for i in range(num_steps):
@@ -52,8 +56,11 @@ def run_simulation(config):
 
         # Store states
         logged_state[i + 1] = q_next
+        logged_forces[i + 1] = u_opt.detach().clone()
 
     plot_results(t_vec, logged_state, trajectory)
+    plot_forces(t_vec, logged_forces, control_allocation.F_max)
+    plt.show()
 
     return t_vec, logged_state
 
@@ -101,7 +108,43 @@ def plot_results(t_vec, logged_state, trajectory):
     plt.grid(True)
     plt.legend()
 
-    plt.show()
+
+def plot_forces(t_vec, logged_forces, F_max):
+
+    # Reshape forces into (time, UAV, x/z components)
+    forces = logged_forces.reshape(len(t_vec), -1, 2)
+
+    # Calculate force magnitude for each UAV
+    force_mag = torch.linalg.vector_norm(forces, dim=2)
+
+    # Convert to NumPy
+    t = t_vec.detach().cpu().numpy()
+    force_mag = force_mag.detach().cpu().numpy()
+    F_max = F_max.detach().cpu().numpy()
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+
+    for i in range(force_mag.shape[1]):
+
+        plt.plot(
+            t, force_mag[:, i],
+            label=f"UAV {i+1} Force"
+        )
+
+        plt.axhline(
+            F_max[i],
+            linestyle="--",
+            label=f"UAV {i+1} Max Force"
+        )
+
+    plt.xlabel("Time (s)")
+    plt.ylabel("Force Magnitude (N)")
+    plt.title("UAV Force Magnitudes vs Maximum Force")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+
 
 def main():
 
