@@ -44,6 +44,6 @@ reference_trajectory:
     omega: 0.5
 
   sinusoidal:
-    amplitude: 0.5
+    amplitude: 2
     omega: 1.0
     vx: 0.5

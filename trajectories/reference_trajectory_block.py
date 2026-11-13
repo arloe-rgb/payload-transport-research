@@ -77,7 +77,7 @@ class reference_trajectory:
         return q, qdot, qddot
 
     def sinusoidal_traj(self, t):
-        
+
         # Sinusoidal trajectory parameters
         A = self.amplitude
         omega = self.omega
