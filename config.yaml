@@ -31,7 +31,7 @@ SIM:
   N: 4 # number of UAVs
 
 reference_trajectory:
-  type: "sinusoidal"  # "circular", "sinusoidal", or "linear"
+  type: "sinusoidal"
 
   duration: 20.0
 
@@ -44,6 +44,12 @@ reference_trajectory:
     omega: 0.5
 
   sinusoidal:
-    amplitude: 2
+    amplitude: 2.0
     omega: 1.0
     vx: 0.5
+
+  orientation:
+    type: "sinusoidal"
+    amplitude: 0.3
+    omega: 3.141592653589793
+    phase: 0.0

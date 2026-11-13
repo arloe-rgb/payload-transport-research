@@ -6,8 +6,10 @@ class reference_trajectory:
     def __init__(self, config):
 
         traj = config["reference_trajectory"]
+        orientation = traj["orientation"]
 
         self.type = traj["type"]
+        self.orientation_type = orientation["type"]
         self.duration = traj["duration"]
 
         self.q_start = torch.tensor(traj["start"], dtype=torch.float64, device="cpu")
@@ -24,93 +26,191 @@ class reference_trajectory:
             self.omega = traj["sinusoidal"]["omega"]
             self.vx = traj["sinusoidal"]["vx"]
 
+        if self.orientation_type == "sinusoidal":
+                    self.theta_amplitude = orientation["amplitude"]
+                    self.theta_omega = orientation["omega"]
+                    self.theta_phase = orientation["phase"]
+
     def get_trajectory(self, t):
 
-        if self.type == "linear":
-            q_ref, qdot_ref, qddot_ref = self.linear(t)
+        pos_ref, vel_ref, acc_ref = self.position_traj(t)
 
-        elif self.type == "circular":
-            q_ref, qdot_ref, qddot_ref = self.circular_traj(t)
+        theta_ref, theta_dot_ref, theta_ddot_ref = self.orientation_traj(t)
 
-        elif self.type == "sinusoidal":
-            q_ref, qdot_ref, qddot_ref = self.sinusoidal_traj(t)
+        q_ref = torch.cat((pos_ref, theta_ref.reshape(1)))
+        qdot_ref = torch.cat((vel_ref, theta_dot_ref.reshape(1)))
+        qddot_ref = torch.cat((acc_ref, theta_ddot_ref.reshape(1)))
 
         x_ref = torch.cat((q_ref, qdot_ref))
 
         return x_ref, qddot_ref
 
-    def linear_traj(self, t):
-        pass
+    def position_traj(self, t):
 
-    def circular_traj(self, t):
+        t = torch.as_tensor( t, dtype=self.q_start.dtype, device=self.q_start.device)
 
-        # STARTING WITH CONSTANT ORIENTATION REFERNCE ANGLE CAN EXPAND TO CHANGING ORIENTATION LATER
+        if self.type == "circular":
 
-        # Circular trajectory parameters
-        xc, zc = self.center
-        r = self.radius
-        omega = self.omega
-        theta = torch.as_tensor(self.theta_ref, dtype=self.center.dtype, device=self.center.device)
-        t = torch.as_tensor(t, dtype=self.center.dtype, device=self.center.device)
+            # Circular trajectory parameters
+            xc, zc = self.center
+            r = self.radius
+            omega = self.omega
 
-        # Position
-        q = torch.stack([
-            xc + r * torch.cos(omega * t),
-            zc + r * torch.sin(omega * t),
-            theta
-        ])
+            # Position
+            pos_ref = torch.stack([
+                xc + r * torch.cos(omega * t),
+                zc + r * torch.sin(omega * t)
+            ])
 
-        # Velocity
-        qdot = torch.stack([
-            -r * omega * torch.sin(omega * t),
-            r * omega * torch.cos(omega * t),
-            torch.zeros_like(t)
-        ])
+            # Velocity
+            vel_ref = torch.stack([
+                -r * omega * torch.sin(omega * t),
+                r * omega * torch.cos(omega * t)
+            ])
 
-        # Acceleration
-        qddot = torch.stack([
-            -r * omega**2 * torch.cos(omega * t),
-            -r * omega**2 * torch.sin(omega * t),
-            torch.zeros_like(t)
-        ])
+            # Acceleration
+            acc_ref = torch.stack([
+                -r * omega**2 * torch.cos(omega * t),
+                -r * omega**2 * torch.sin(omega * t)
+            ])
 
-        return q, qdot, qddot
+        elif self.type == "sinusoidal":
 
-    def sinusoidal_traj(self, t):
+            # Sinusoidal trajectory parameters
+            A = self.amplitude
+            omega = self.omega
+            vx = self.vx
 
-        # Sinusoidal trajectory parameters
-        A = self.amplitude
-        omega = self.omega
-        vx = self.vx
+            x0, z0 = self.q_start[:2]
 
-        x0, z0, theta = self.q_start
+            # Position
+            pos_ref = torch.stack([
+                x0 + vx * t,
+                z0 + A * torch.sin(omega * t)
+            ])
 
-        t = torch.as_tensor(
-            t,
-            dtype=self.q_start.dtype,
-            device=self.q_start.device
-        )
+            # Velocity
+            vel_ref = torch.stack([
+                vx * torch.ones_like(t),
+                A * omega * torch.cos(omega * t)
+            ])
 
-        # Position
-        q = torch.stack([
-            x0 + vx * t,
-            z0 + A * torch.sin(omega * t),
-            theta
-        ])
+            # Acceleration
+            acc_ref = torch.stack([
+                torch.zeros_like(t),
+                -A * omega**2 * torch.sin(omega * t)
+            ])
 
-        # Velocity
-        qdot = torch.stack([
-            vx * torch.ones_like(t),
-            A * omega * torch.cos(omega * t),
-            torch.zeros_like(t)
-        ])
+        else:
+            raise ValueError(f"Unsupported position trajectory: {self.type}")
 
-        # Acceleration
-        qddot = torch.stack([
-            torch.zeros_like(t),
-            -A * omega**2 * torch.sin(omega * t),
-            torch.zeros_like(t)
-        ])
+        return pos_ref, vel_ref, acc_ref
 
-        return q, qdot, qddot
+    def orientation_traj(self, t):
 
+        t = torch.as_tensor(t, dtype=self.q_start.dtype, device=self.q_start.device)
+
+        theta0 = self.q_start[2]
+
+        if self.orientation_type == "sinusoidal":
+
+            A = self.theta_amplitude
+            omega = self.theta_omega
+            phi = self.theta_phase
+
+            # Orientation
+            theta_ref = theta0 + A * torch.sin(omega * t + phi)
+
+            # Angular velocity
+            theta_dot_ref = A * omega * torch.cos(omega * t + phi)
+
+            # Angular acceleration
+            theta_ddot_ref = -A * omega**2 * torch.sin(omega * t + phi)
+
+        elif self.orientation_type == "constant":
+
+            theta_ref = theta0 + torch.zeros_like(t)
+            theta_dot_ref = torch.zeros_like(t)
+            theta_ddot_ref = torch.zeros_like(t)
+
+        else:
+            raise ValueError(
+                f"Unsupported orientation trajectory: {self.orientation_type}"
+            )
+
+        return theta_ref, theta_dot_ref, theta_ddot_ref
+
+    # def linear_traj(self, t):
+        #     pass
+    
+        # def circular_traj(self, t):
+    
+        #     # STARTING WITH CONSTANT ORIENTATION REFERNCE ANGLE CAN EXPAND TO CHANGING ORIENTATION LATER
+    
+        #     # Circular trajectory parameters
+        #     xc, zc = self.center
+        #     r = self.radius
+        #     omega = self.omega
+        #     theta = torch.as_tensor(self.theta_ref, dtype=self.center.dtype, device=self.center.device)
+        #     t = torch.as_tensor(t, dtype=self.center.dtype, device=self.center.device)
+    
+        #     # Position
+        #     q = torch.stack([
+        #         xc + r * torch.cos(omega * t),
+        #         zc + r * torch.sin(omega * t),
+        #         theta
+        #     ])
+    
+        #     # Velocity
+        #     qdot = torch.stack([
+        #         -r * omega * torch.sin(omega * t),
+        #         r * omega * torch.cos(omega * t),
+        #         torch.zeros_like(t)
+        #     ])
+    
+        #     # Acceleration
+        #     qddot = torch.stack([
+        #         -r * omega**2 * torch.cos(omega * t),
+        #         -r * omega**2 * torch.sin(omega * t),
+        #         torch.zeros_like(t)
+        #     ])
+    
+        #     return q, qdot, qddot
+    
+        # def sinusoidal_traj(self, t):
+    
+        #     # Sinusoidal trajectory parameters
+        #     A = self.amplitude
+        #     omega = self.omega
+        #     vx = self.vx
+    
+        #     x0, z0, theta = self.q_start
+    
+        #     t = torch.as_tensor(
+        #         t,
+        #         dtype=self.q_start.dtype,
+        #         device=self.q_start.device
+        #     )
+    
+        #     # Position
+        #     q = torch.stack([
+        #         x0 + vx * t,
+        #         z0 + A * torch.sin(omega * t),
+        #         theta
+        #     ])
+    
+        #     # Velocity
+        #     qdot = torch.stack([
+        #         vx * torch.ones_like(t),
+        #         A * omega * torch.cos(omega * t),
+        #         torch.zeros_like(t)
+        #     ])
+    
+        #     # Acceleration
+        #     qddot = torch.stack([
+        #         torch.zeros_like(t),
+        #         -A * omega**2 * torch.sin(omega * t),
+        #         torch.zeros_like(t)
+        #     ])
+    
+        #     return q, qdot, qddot
