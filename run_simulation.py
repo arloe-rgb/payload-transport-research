@@ -2,6 +2,7 @@ import torch
 import yaml
 
 from models.plant_block import plant
+from models.uav_block import UAV
 from controllers.controller_block import PD_FF_Controller
 from controllers.control_allocation_block import allocator
 from trajectories.reference_trajectory_block import reference_trajectory
@@ -11,6 +12,7 @@ def run_simulation(config, *, replay_path=None):
 
     # Object Initialization
     payload = plant(config)
+    uav = UAV(config)
     controller = PD_FF_Controller(config)
     trajectory = reference_trajectory(config)
     control_allocation = allocator(config, payload.B_mat, controller.control_cmd, trajectory.get_trajectory)
@@ -23,7 +25,11 @@ def run_simulation(config, *, replay_path=None):
     t_vec = torch.linspace(0, duration, num_steps + 1, dtype=payload.state.dtype, device=payload.state.device)
 
     # Init data logger
-    logger = SimulationLogger(t_vec, payload.state, control_allocation.u, control_allocation.lamda, control_allocation.F_max, control_allocation.FOO_vector, trajectory.get_trajectory)
+    logger = SimulationLogger(
+        t_vec, payload.state, control_allocation.u, control_allocation.lamda,
+        control_allocation.F_max, control_allocation.FOO_vector, trajectory.get_trajectory,
+        uav=uav,
+    )
     logger.log_step(0, payload.state, control_allocation.u, control_allocation.lamda)
 
     # Simulation Loop

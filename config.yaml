@@ -11,6 +11,9 @@ payload:
     - [-1,  1]
     - [ 1,  1]
     - [ 2,  1]
+  
+  N: 4 # number of attachment points
+  cable_lengths: [1.0, 1.0, 1.0, 1.0]
 
 allocation:
   weights: [1.0, 1.0, 1.0, 1.0]
@@ -27,13 +30,13 @@ controller:
 SIM:
   initial_cond: [0, 0, 0, 0, 0, 0]
   dt: 0.01
-  duration: 20
+  duration: 15.0
   N: 4 # number of UAVs
 
 reference_trajectory:
   type: "sinusoidal"
 
-  duration: 20.0
+  duration: 15.0
 
   start: [0.0, 0.0, 0.0]
   goal: [3.0, 2.0, 0.0]
@@ -44,7 +47,7 @@ reference_trajectory:
     omega: 0.5
 
   sinusoidal:
-    amplitude: 2.0
+    amplitude: 1.0
     omega: 1.0
     vx: 0.5
 

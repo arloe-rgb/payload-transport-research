@@ -16,6 +16,7 @@ ASSETS = (
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 REQUIRED = {"version", "payload", "forceLimits", "time", "state", "reference", "u"}
 OPTIONAL = {"lambda", "gradientU", "gradientLambda"}
+POSITION_HISTORIES = {"attachment_positions", "uav_positions"}
 
 
 def finite(value):
@@ -29,9 +30,14 @@ def vector(value, size):
 def read_replay(path):
     raw = path.read_bytes()
     data = json.loads(raw)
-    if (not isinstance(data, dict) or not REQUIRED <= data.keys()
-            or data.keys() - REQUIRED - OPTIONAL or data["version"] != 1):
-        raise ValueError("Expected a version 1 export with only replay fields.")
+    if not isinstance(data, dict) or not finite(data.get("version")) or data["version"] != 1:
+        raise ValueError("Expected a version 1 replay export.")
+    missing = REQUIRED - data.keys()
+    if missing:
+        raise ValueError(f"Missing replay fields: {', '.join(sorted(missing))}.")
+    unknown = data.keys() - REQUIRED - OPTIONAL - POSITION_HISTORIES
+    if unknown:
+        raise ValueError(f"Unexpected replay fields: {', '.join(sorted(unknown))}.")
     payload = data["payload"]
     if not isinstance(payload, dict) or payload.keys() != {"width", "height", "attachments"}:
         raise ValueError("Invalid payload geometry fields.")
@@ -57,6 +63,17 @@ def read_replay(path):
         rows = data[key]
         if (not isinstance(rows, list) or len(rows) != len(times)
                 or not all(vector(row, width) for row in rows)):
+            raise ValueError(f"Invalid history: {key}.")
+    for key in sorted(POSITION_HISTORIES & data.keys()):
+        rows = data[key]
+        allow_undefined = key == "uav_positions"
+        if (not isinstance(rows, list) or len(rows) != len(times)
+                or not all(
+                    isinstance(row, list) and len(row) == count
+                    and all(vector(point, 2) or (allow_undefined and point == [None, None])
+                            for point in row)
+                    for row in rows
+                )):
             raise ValueError(f"Invalid history: {key}.")
     return raw, {
         "duration": times[-1] - times[0],
@@ -105,7 +122,8 @@ def add_run(checkout, args):
     if args.default or not manifest.get("default"):
         manifest["default"] = args.id
     encoded = json.dumps(manifest, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
-    sync(checkout)
+    if not args.no_sync:
+        sync(checkout)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(raw)
     temporary = manifest_path.with_suffix(".json.tmp")
@@ -129,6 +147,7 @@ def main():
     add.add_argument("--name", required=True)
     add.add_argument("--description")
     add.add_argument("--default", action="store_true")
+    add.add_argument("--no-sync", action="store_true", help="Add the dataset without copying viewer assets.")
     args = parser.parse_args()
     checkout = args.checkout.resolve()
     research = SOURCE.parent

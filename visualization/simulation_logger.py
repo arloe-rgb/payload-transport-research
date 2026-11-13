@@ -7,17 +7,20 @@ from visualization.export import write_replay
 
 
 class SimulationLogger:
-    def __init__(self, t_vec, state, forces, multipliers, force_limits, gradients, reference):
+    def __init__(self, t_vec, state, forces, multipliers, force_limits, gradients, reference, *, uav):
         self.t_vec = t_vec.detach().clone()
         self.force_limits = force_limits.detach().clone()
         self._evaluate_gradients = gradients
         self._get_trajectory = reference
+        self._uav = uav
 
         samples = len(self.t_vec)
         self.logged_state = state.new_zeros((samples, state.numel()))
         self.logged_forces = forces.new_zeros((samples, forces.numel()))
         self.logged_multipliers = multipliers.new_zeros((samples, multipliers.numel()))
         self.logged_gradients = forces.new_zeros((samples, forces.numel() + multipliers.numel()))
+        self.logged_attachment_positions = state.new_zeros((samples, uav.N, 2))
+        self.logged_uav_positions = state.new_full((samples, uav.N, 2), torch.nan)
 
     def log_step(self, index, state, forces, multipliers):
         """Record the current plant and allocator state at a timeline index."""
@@ -30,6 +33,10 @@ class SimulationLogger:
                 self.logged_state[index],
             )
             self.logged_gradients[index].copy_(gradient.detach())
+            logged_state = self.logged_state[index]
+            logged_forces = self.logged_forces[index]
+            self.logged_attachment_positions[index].copy_(self._uav.attachment_points(logged_state))
+            self.logged_uav_positions[index].copy_(self._uav.UAV_positions(logged_state, logged_forces))
 
     def _reference_history(self):
         with torch.no_grad():
@@ -46,6 +53,8 @@ class SimulationLogger:
             path, payload_geometry, self.force_limits,
             self.t_vec, self.logged_state, self._reference_history(), self.logged_forces,
             self.logged_multipliers, self.logged_gradients,
+            attachment_positions=self.logged_attachment_positions,
+            uav_positions=self.logged_uav_positions,
         )
 
     def plot_results(self):
