@@ -3,7 +3,9 @@ import yaml
 
 from models.plant_block import plant
 from models.uav_block import UAV
+from models.state_predictor_block import StatePredictor
 from controllers.controller_block import PD_FF_Controller
+from controllers.adaptation_block import Adaptation
 from controllers.control_allocation_block import allocator
 from trajectories.reference_trajectory_block import reference_trajectory
 from visualization.simulation_logger import SimulationLogger
@@ -13,9 +15,20 @@ def run_simulation(config, *, replay_path=None):
     # Object Initialization
     payload = plant(config)
     uav = UAV(config)
-    controller = PD_FF_Controller(config)
     trajectory = reference_trajectory(config)
-    control_allocation = allocator(config, payload.B_mat, controller.control_cmd, trajectory.get_trajectory)
+
+    predictor = StatePredictor(config, payload.B_mat, payload.state)
+    controller = PD_FF_Controller(config, predictor)
+    adaptation = Adaptation(config, predictor)
+
+    control_allocation = allocator(
+        config,
+        B_mat_func=payload.B_mat,
+        control_cmd_func=controller.control_cmd,
+        get_traj_func=trajectory.get_trajectory,
+        predictor=predictor,
+        adaptive_accel_cmd_func=controller.adaptive_accel_cmd,
+    )
   
     # SIM Parameter Setup
     sim = config['SIM']
@@ -24,11 +37,24 @@ def run_simulation(config, *, replay_path=None):
     num_steps = int(round(duration/dt))
     t_vec = torch.linspace(0, duration, num_steps + 1, dtype=payload.state.dtype, device=payload.state.device)
 
-    # Init data logger
+    # Collect adaptive diagnostics at each logged state
+    def adaptive_snapshot(t, u, lamda, x):
+        x_hat = predictor.state
+        w_hat = adaptation.w_hat
+        x_ref, qddot_ref = trajectory.get_trajectory(t)
+        accel_cmd = controller.adaptive_accel_cmd(x, x_hat, x_ref, qddot_ref)
+        uff, foo, x_hat_dot, w_hat_dot = control_allocation.adaptive_u_ff(
+            t, u, lamda, x, x_hat, w_hat, adaptation
+        )
+        return x_hat, x_hat_dot, w_hat, w_hat_dot, accel_cmd, uff, foo
+
+    # Initialize the logger and record the starting state
     logger = SimulationLogger(
         t_vec, payload.state, control_allocation.u, control_allocation.lamda,
-        control_allocation.F_max, control_allocation.FOO_vector, trajectory.get_trajectory,
-        uav=uav,
+        control_allocation.F_max, None, trajectory.get_trajectory,
+        uav=uav, adaptive_snapshot=adaptive_snapshot,
+        nominal_parameters=(predictor.m0, predictor.J0),
+        true_parameters=(payload.m, payload.J),
     )
     logger.log_step(0, payload.state, control_allocation.u, control_allocation.lamda)
 
@@ -43,8 +69,8 @@ def run_simulation(config, *, replay_path=None):
         u = control_allocation.u.clone()
         x_dot = payload.run_dynamics(x, u)
 
-        # control allocation
-        u_opt = control_allocation.allocate(t, x, x_dot, dt)
+        # Advance the allocator, predictor, and parameter estimates
+        u_opt = control_allocation.adaptive_allocate(t, x, x_dot, dt, adaptation)
 
         # Check control forces before applying them
         if not torch.isfinite(u_opt).all():

@@ -18,6 +18,7 @@ payload:
 allocation:
   weights: [1.0, 1.0, 1.0, 1.0]
   F_max: [10.0, 10.0, 10.0, 10.0]
+  min_cable_angle_deg: 30.0
   log_scalar: 0.01
   gamma: [10.0, 10.0, 10.0, 10.0,
           10.0, 10.0, 10.0, 10.0,
@@ -26,6 +27,20 @@ allocation:
 controller:
   Kp: [1.0, 1.0, 1.0]
   Kd: [1.0, 1.0, 1.0]
+
+state_predictor:
+  nominal_mass: 2.0
+  nominal_inertia: 0.15
+  k_s1: 5.0
+  k_s2: 5.0
+
+adaptation:
+  w_init: [1.0, 1.0]
+  projection_max_norm: 8.0
+  projection_tol: 0.1
+  gamma_w: [0.1, 0.1]
+  error_position_gain: 1.0
+  error_velocity_gain: 1.0
 
 SIM:
   initial_cond: [0, 0, 0, 0, 0, 0]
