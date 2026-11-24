@@ -1,7 +1,7 @@
 import yaml
 import torch
 import math
-from torch.func import grad, jacfwd
+from torch.func import grad, jacfwd, jacrev
 
 class allocator:
 
@@ -170,9 +170,18 @@ class allocator:
     def adaptive_u_ff(self, t, u, lamda, x, x_hat, w_hat, adaptation):
         # Optimality vector and its derivatives
         foo = self.adaptive_FOO_vector(t, u, lamda, x, x_hat, w_hat)
-        dFOO_dt, dFOO_dx, dFOO_dx_hat, dFOO_dw_hat = jacfwd(
+        jacobians = jacrev(
             self.adaptive_FOO_vector, argnums=(0, 3, 4, 5)
         )(t, u, lamda, x, x_hat, w_hat)
+        uff, x_hat_dot, w_hat_dot = self._adaptive_feedforward_from_jacobians(
+            x, u, x_hat, w_hat, adaptation, foo, jacobians
+        )
+        return uff, foo, x_hat_dot, w_hat_dot
+
+    def _adaptive_feedforward_from_jacobians(
+        self, x, u, x_hat, w_hat, adaptation, foo, jacobians
+    ):
+        dFOO_dt, dFOO_dx, dFOO_dx_hat, dFOO_dw_hat = jacobians
 
         # Plant state derivative from the estimated model
         phi = self.predictor.regressor(x, u)
@@ -190,17 +199,22 @@ class allocator:
             + dFOO_dx_hat @ x_hat_dot
             + dFOO_dw_hat @ w_hat_dot
         )
-        return uff, foo, x_hat_dot, w_hat_dot
+        return uff, x_hat_dot, w_hat_dot
 
     def adaptive_allocator_dynamics(self, t, u, lamda, x, x_hat, w_hat, adaptation):
-        uff, foo, x_hat_dot, w_hat_dot = self.adaptive_u_ff(
-            t, u, lamda, x, x_hat, w_hat, adaptation
-        )
+        def optimality_with_aux(t, u, lamda, x, x_hat, w_hat):
+            foo = self.adaptive_FOO_vector(t, u, lamda, x, x_hat, w_hat)
+            return foo, foo
 
-        # Hessian of the adaptive Lagrangian
-        dFOO_du, dFOO_dlamda = jacfwd(
-            self.adaptive_FOO_vector, argnums=(1, 2)
+        jacobians, foo = jacrev(
+            optimality_with_aux, argnums=(0, 1, 2, 3, 4, 5), has_aux=True
         )(t, u, lamda, x, x_hat, w_hat)
+        dFOO_dt, dFOO_du, dFOO_dlamda, dFOO_dx, dFOO_dx_hat, dFOO_dw_hat = jacobians
+
+        uff, x_hat_dot, w_hat_dot = self._adaptive_feedforward_from_jacobians(
+            x, u, x_hat, w_hat, adaptation, foo,
+            (dFOO_dt, dFOO_dx, dFOO_dx_hat, dFOO_dw_hat),
+        )
         hessian = torch.cat((dFOO_du, dFOO_dlamda), dim=1)
 
         y_dot = torch.linalg.solve(hessian, -(self.Gamma @ foo + uff))

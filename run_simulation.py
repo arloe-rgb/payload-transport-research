@@ -1,5 +1,6 @@
 import torch
 import yaml
+from time import perf_counter
 
 from models.plant_block import plant
 from models.uav_block import UAV
@@ -11,6 +12,8 @@ from trajectories.reference_trajectory_block import reference_trajectory
 from visualization.simulation_logger import SimulationLogger
 
 def run_simulation(config, *, replay_path=None):
+
+    started = perf_counter()
 
     # Object Initialization
     payload = plant(config)
@@ -83,6 +86,9 @@ def run_simulation(config, *, replay_path=None):
             raise RuntimeError(f"Invalid payload state at step {i}, t={t.item():.4f}")
 
         logger.log_step(i + 1, q_next, control_allocation.u, control_allocation.lamda)
+
+    elapsed = perf_counter() - started
+    print(f"Simulation wall time: {elapsed:.2f} seconds", flush=True)
 
     if replay_path is None:
         logger.show_plots()
