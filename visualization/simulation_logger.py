@@ -24,6 +24,7 @@ class SimulationLogger:
         samples = len(self.t_vec)
         self.logged_state = state.new_zeros((samples, state.numel()))
         self.logged_forces = forces.new_zeros((samples, forces.numel()))
+        self.logged_force_angles_deg = forces.new_full((samples, uav.N), torch.nan)
         self.logged_multipliers = multipliers.new_zeros((samples, multipliers.numel()))
         self.logged_gradients = forces.new_zeros((samples, forces.numel() + multipliers.numel()))
         self.logged_attachment_positions = state.new_zeros((samples, uav.N, 2))
@@ -67,6 +68,17 @@ class SimulationLogger:
             self.logged_gradients[index].copy_(gradient.detach())
             self.logged_attachment_positions[index].copy_(self._uav.attachment_points(logged_state))
             self.logged_uav_positions[index].copy_(self._uav.UAV_positions(logged_state, logged_forces))
+            self._log_force_angles(index, logged_state[2], logged_forces)
+
+    def _log_force_angles(self, index, theta, forces):
+        """Record each UAV force's unsigned angle to the payload normal."""
+        force_vectors = forces.reshape(-1, 2)
+        normal = torch.stack((-theta.sin(), theta.cos()))
+        magnitudes = torch.linalg.vector_norm(force_vectors, dim=1)
+        magnitudes = magnitudes.masked_fill(magnitudes == 0, torch.nan)
+        cosine = (force_vectors @ normal) / magnitudes
+        angles_deg = torch.rad2deg(torch.acos(cosine.clamp(-1.0, 1.0)))
+        self.logged_force_angles_deg[index].copy_(angles_deg)
 
     def _reference_history(self):
         with torch.no_grad():
@@ -75,6 +87,7 @@ class SimulationLogger:
     def show_plots(self):
         self.plot_results()
         self.plot_forces()
+        self.plot_force_angles()
         self.plot_allocator_diagnostics()
         if self._adaptive_snapshot is not None:
             self.plot_prediction_error()
@@ -174,6 +187,20 @@ class SimulationLogger:
         plt.legend()
         plt.tight_layout()
 
+
+    def plot_force_angles(self):
+        time = self.t_vec.cpu().numpy()
+        angles_deg = self.logged_force_angles_deg.cpu().numpy()
+        _, ax = plt.subplots(num="UAV Force Angles", figsize=(10, 6), layout="constrained")
+
+        for i, angles in enumerate(angles_deg.T, start=1):
+            ax.plot(time, angles, label=f"UAV {i}")
+
+        ax.set_title("UAV Force Angles")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Angle to payload normal (°)")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
 
     def plot_allocator_diagnostics(self):
         time = self.t_vec.detach().cpu().numpy()

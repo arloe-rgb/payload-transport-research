@@ -31,7 +31,7 @@ class allocator:
         self.u = torch.zeros(self.N*2, dtype=torch.float64, device="cpu")
         self.F_max = self.u.new_tensor(allocator["F_max"])
         self.u[1::2] = 0.5 * self.F_max
-        self.min_cable_angle_sin = math.sin(math.radians(allocator["min_cable_angle_deg"]))
+        self.cos_max_cable_angle = math.cos(math.radians(allocator["max_cable_angle_deg"]))
 
         # multipliers for equality constraints
         self.lamda = self.u.new_zeros(3)
@@ -61,13 +61,13 @@ class allocator:
 
         # Cable elevation margin relative to the payload surface
         normal = torch.stack((-torch.sin(theta), torch.cos(theta)))
-        angle_margin = u @ normal - torch.sqrt(force_mag) * self.min_cable_angle_sin
+        angle_margin = torch.sqrt(force_mag) * self.cos_max_cable_angle - u @ normal
 
         # Log barrier cost function
         barrier_cost = -self.log_scalar*(
             torch.sum(torch.log(-force_mag_constr))
             + torch.sum(torch.log(-force_dir_constr))
-            + torch.log(angle_margin).sum()
+            + torch.sum(torch.log(-angle_margin))
         )
 
         return quad_cost + barrier_cost

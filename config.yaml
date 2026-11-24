@@ -18,7 +18,7 @@ payload:
 allocation:
   weights: [1.0, 1.0, 1.0, 1.0]
   F_max: [10.0, 10.0, 10.0, 10.0]
-  min_cable_angle_deg: 30.0
+  max_cable_angle_deg: 75
   log_scalar: 0.01
   gamma: [10.0, 10.0, 10.0, 10.0,
           10.0, 10.0, 10.0, 10.0,
@@ -68,6 +68,6 @@ reference_trajectory:
 
   orientation:
     type: "sinusoidal"
-    amplitude: 0.3
-    omega: 3.141592653589793
+    amplitude: 0.2
+    omega: 2.0 #3.141592653589793
     phase: 0.0
